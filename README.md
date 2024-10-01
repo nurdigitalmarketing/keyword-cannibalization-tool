@@ -1,7 +1,7 @@
 # Keyword Cannibalization Tool
 
 Questo strumento consente di identificare la cannibalizzazione delle parole chiave utilizzando i dati della Google Search Console (GSC). 
-Carica un file CSV dalla GSC API per trovare le pagine del tuo sito che competono per le stesse parole chiave.
+Carica un file CSV dalla [GSC API](https://search-console-connector.streamlit.app/) per trovare le pagine del tuo sito che competono per le stesse parole chiave.
 
 ## Funzionalità
 - Analisi della cannibalizzazione delle keyword
@@ -23,7 +23,7 @@ Carica un file CSV dalla GSC API per trovare le pagine del tuo sito che competon
    ```bash
    streamlit run app.py
    ```
-2. Carica il file CSV ottenuto dalla Google Search Console API per iniziare l'analisi.
+2. Carica il file CSV ottenuto dalla [Google Search Console API](https://search-console-connector.streamlit.app/) per iniziare l'analisi.
 
 ## Licenza
 Questo progetto è distribuito sotto licenza MIT. Vedi il file [LICENSE](LICENSE) per maggiori dettagli.
