@@ -7,7 +7,7 @@ from openpyxl.styles import PatternFill, Font
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 # Configurazione della pagina con titolo e icona
-st.set_page_config(page_title="Keyword Cannibalization Tool", page_icon="🔑")
+st.set_page_config(page_title="Keyword Cannibalization Tool • NUR® Digital Marketing", page_icon="./Nur-simbolo-1080x1080.png")
 
 # Aggiungi il logo di Nur Digital Marketing
 st.image("./logo_nur_vettoriale.svg", width=100)  # Sostituisci l'URL con il percorso del logo
