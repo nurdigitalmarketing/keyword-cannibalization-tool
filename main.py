@@ -1,199 +1,132 @@
-import dimensions
-import metrics
-import pandas as pd
+import datetime
+import io
 import streamlit as st
-from openpyxl import load_workbook, Workbook
-from openpyxl.styles import PatternFill, Font
+import pandas as pd
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 # Configurazione della pagina con titolo e icona
 st.set_page_config(page_title="Keyword Cannibalization Tool • NUR® Digital Marketing", page_icon="./Nur-simbolo-1080x1080.png")
+st.image("./logo_nur_vettoriale.svg", width=100)
 
-# Aggiungi il logo di Nur Digital Marketing
-st.image("./logo_nur_vettoriale.svg", width=100)  # Sostituisci l'URL con il percorso del logo
-
-# Titolo e descrizione dello strumento
 st.markdown("# Keyword Cannibalization Tool")
 st.markdown("""
 Trova le pagine che competono tra loro per la stessa parola chiave utilizzando i dati GSC.
 I dati devono contenere informazioni multidimensionali su query (parole chiave) e pagine.
 """)
 
-# Aggiunta delle indicazioni in una sezione collapsabile (st.expander)
+perc_slider = st.slider('Imposta Soglia (es: 80%)', 0, 100, value=80, step=10)
+
 with st.expander("Come funziona?"):
     st.markdown("""
-1.  Vai sullo strumento [GSC API](https://search-console-connector.streamlit.app/)
-2.  Clicca su "Sign-in with Google"
-3.  Dopo aver fatto l'autenticazione, clicca su "Access GSC API"
-4.  Seleziona il dominio da "Web property to review (please sign in via Google OAuth first)"
-5.  Dimension: lascia "query"
-6.  Nested dimension: seleziona "page"
-7.  Seleziona un periodo temporale dal menu a discesa
-8.  Clicca su "Fetch GSC API Data"
-9.  Scarica il file da "Download CSV"
-10.  Torna sullo strumento di cannibalizzazione e carica il file appena scaricato da GSC
-    """)   
-
-# Slider per impostare la soglia
-perc_slider = st.slider('Imposta Soglia (es: 80 = Selezione delle prime 80% di query per metrica)', 0, 100, value=80, step=10, key='perc_slider')
-
-# Spiegazione della soglia
-with st.expander("Cosa significa la soglia?"):
-    st.info("""
-La soglia che imposti indica che l'analisi si concentrerà solo sulle query o parole chiave che generano la percentuale impostata del totale delle prestazioni. 
-Ad esempio, una soglia dell'80% significa che verranno analizzate solo le query che rappresentano l'80% del traffico o delle metriche selezionate, 
-ignorando quelle meno rilevanti.
+1. Autenticati con Google Search Console
+2. Seleziona un dominio e i parametri di ricerca
+3. I dati verranno automaticamente estratti e processati per l'analisi della cannibalizzazione
 """)
-    
-st.markdown("---")
 
-# Caricamento del file CSV
-gsc_data_file = st.file_uploader('Carica Dati', type='csv', key='key')
+# Funzione di autenticazione Google
+def google_auth():
+    client_config = {
+        "installed": {
+            "client_id": st.secrets["installed"]["client_id"],
+            "client_secret": st.secrets["installed"]["client_secret"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://accounts.google.com/o/oauth2/token",
+            "redirect_uris": st.secrets["installed"]["redirect_uris"]
+        }
+    }
+    scopes = ["https://www.googleapis.com/auth/webmasters.readonly"]
+    flow = Flow.from_client_config(client_config, scopes=scopes, redirect_uri=st.secrets["installed"]["redirect_uris"][0])
+    auth_url, _ = flow.authorization_url(prompt="consent")
+    return flow, auth_url
 
-summary = []
+# Verifica se l'utente è già autenticato tramite session state
+if 'credentials' not in st.session_state:
+    # Autenticazione con Google Search Console
+    flow, auth_url = google_auth()
+    st.markdown(f"[Accedi a Google Search Console]({auth_url})")
 
-# Funzione per controllare la fonte dei dati
-def check_source(df):
-    if 'query' in df.columns.str.lower() and 'clicks' in df.columns.str.lower():
-        if 'page' in df.columns.str.lower():
-            return dimensions.gsc_dimensions, metrics.gsc_metrics
-        else:
-            st.error('I dati devono contenere una colonna "page".')
-            st.stop()
-    elif 'keyword' in df.columns.str.lower() and 'url' in df.columns.str.lower():
-        return dimensions.semrush_dimensions, metrics.semrush_metrics
-    else:
-        st.error('File dati non valido. Si prega di caricare un file valido.')
-        st.stop()
+    # Usare st.query_params invece di st.experimental_get_query_params
+    query_params = st.query_params
+    auth_code = query_params.get("code")
 
-# Funzione per filtrare righe con caratteri non ASCII
-def is_ascii(string):
-    try:
-        string.encode('ascii')
-    except UnicodeEncodeError:
-        return False
-    else:
-        return True
-
-# Funzione per elaborare i dati e calcolare le metriche
-def process_data(df, metric, perc_cumsum, dimension):
-    dimension = [d.lower() for d in dimension]
-    groupby_column_name = dimension[0]
-    metric_name = metric.lower()
-
-    if 'query' in dimension:
-        df_cols = [groupby_column_name, 'page', metric_name, 'ctr', 'position', metric_name + '_percent_all_query',
-                   'query_percentile_' + metric_name]
-    if 'keyword' in dimension:
-        df_cols = [groupby_column_name, 'url', metric_name, 'cpc', 'position', metric_name + '_percent_all_keyword']
-
-    grouped_df = df.groupby(metric_name, as_index=False).apply(
-        lambda group: group.sort_values(metric_name, ascending=False))
-
-    sum_per_group = grouped_df.groupby(groupby_column_name)[metric_name].sum().sort_values(ascending=False)
-    percent_per_group = grouped_df.groupby(groupby_column_name)[metric_name].sum() / grouped_df[metric_name].sum()
-
-    cumsum_percent = percent_per_group.sort_values(ascending=False).cumsum()
-    top_n_percent = percent_per_group[cumsum_percent <= float(perc_cumsum)]
-
-    df = pd.merge(grouped_df, sum_per_group, left_on=groupby_column_name, right_index=True, suffixes=('', '_sum'))
-    df = pd.merge(df, top_n_percent, left_on=groupby_column_name, right_index=True,
-                  suffixes=('', f'_percent_all_{dimension[0]}'))
-
-    df.sort_values([metric_name + '_sum', metric_name], ascending=[False, False], inplace=True)
-    df[f'{dimension[0]}_percentile_' + metric_name] = df[metric_name] / df[metric_name + '_sum']
-    df.sort_values([metric_name + '_sum', metric_name], ascending=[False, False], inplace=True)
-    df = df[df[f'{dimension[0]}_percentile_' + metric_name] >= 0.10]
-    df.drop_duplicates(subset=[dimension[0], dimension[1]], inplace=True)
-    df = df[df.duplicated(subset=[dimension[0]], keep=False)]
-    df.sort_values([metric_name + '_sum', dimension[0], metric_name, 'position'], ascending=[False, True, False, True],
-                   inplace=True)
-
-    unique_values = df[dimension[0]].nunique()
-    summary.append(f'{unique_values} parole chiave uniche in competizione per {metric_name}.')
-    df = df[df_cols]
-    return df
-
-# Funzione per unire i DataFrame elaborati
-def process_merge(dfs, dimension):
-    merged_df = pd.merge(dfs[0], dfs[1], on=[dimension[0], dimension[1]], how='inner')
-    merged_df = merged_df[merged_df.duplicated(subset=[dimension[0]], keep=False)]
-    merged_df = merged_df.loc[:, ~merged_df.columns.str.endswith('_y')]
-    merged_df = merged_df.rename(columns=lambda x: x.replace('_x', ''))
-    return merged_df
-
-# Funzione per formattare l'Excel, aggiungendo le righe in verde
-def format_excel(xlsx_file):
-    wb = load_workbook(filename=xlsx_file)
-    
-    # Formattazione per le righe "buone"
-    good_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-    good_font = Font(color="006100")
-
-    for ws in wb.worksheets:
-        ws.sheet_view.zoomScale = 130
-        seen_queries = set()
-
-        for row in ws.iter_rows(min_row=2, max_col=ws.max_column, max_row=ws.max_row, values_only=False):
-            query = row[0].value
-            if query not in seen_queries:
-                seen_queries.add(query)
-                for cell in row:
-                    cell.fill = good_fill
-                    cell.font = good_font
-
-        ws.title = f'Competing by {ws.title}'
-
-    wb.save(f'cannibalization_data_threshold_{perc_slider}.xlsx')
-    return wb
-
-# Main
-if __name__ == '__main__':
-    if gsc_data_file is not None:
-        data = pd.read_csv(gsc_data_file)
-        data.columns = data.columns.str.lower()
-
-        dimensions, metrics = check_source(data)
-        data = data[data[dimensions[0]].apply(lambda x: is_ascii(str(x)))]
-        perc_cumsum = perc_slider / 100
-
-        data = data[data[metrics[0]] > 0]
-        dfs = []
-        wb = Workbook()
-
-        for metric in metrics[:2]:
-            df_processed = process_data(data, metric, perc_cumsum, dimensions)
-            dfs.append(df_processed)
-
-        dfs.append(process_merge(dfs, dimensions))
-        unique_vals = dfs[2][dimensions[0]].nunique()
-        summary.append(f'{unique_vals} parole chiave uniche in competizione per {metrics[2]}.')
-
+    if auth_code:
         try:
-            for sheet_name, df in zip(metrics, dfs):
-                sheet = wb.create_sheet(title=sheet_name)
-                for row in dataframe_to_rows(df, index=False, header=True):
-                    sheet.append(row)
-        except IndexError:
-            st.error('Soglia troppo bassa. Si prega di aumentare la soglia.')
-        
-        wb.remove(wb['Sheet'])
-        wb.save(f'cannibalization_data_threshold_{perc_slider}.xlsx')
+            flow.fetch_token(code=auth_code)
+            st.session_state['credentials'] = flow.credentials  # Salva le credenziali in sessione
+            st.experimental_rerun()  # Ricarica la pagina dopo l'autenticazione
+        except Exception as e:
+            st.error(f"Errore durante l'autenticazione: {e}")
+else:
+    # Se l'utente è autenticato, continua con l'estrazione dei dati
+    credentials = st.session_state['credentials']
+    service = build('webmasters', 'v3', credentials=credentials)
 
-        wb = format_excel(f'cannibalization_data_threshold_{perc_slider}.xlsx')
-        wb.save(f'cannibalization_data_threshold_{perc_slider}.xlsx')
+    @st.cache_data
+    def list_properties(_service):
+        try:
+            site_list = _service.sites().list().execute()
+            return [site['siteUrl'] for site in site_list.get('siteEntry', [])]
+        except Exception as e:
+            st.error(f"Errore nel recuperare le proprietà: {e}")
+            return []
 
-        st.markdown(f'### Riassunto, soglia impostata al {perc_slider}%')
-        for s in summary:
-            st.markdown(f'{s}')
-        
-        with open(f"cannibalization_data_threshold_{perc_slider}.xlsx", "rb") as file:
-            st.download_button(label='Scarica Analisi di Cannibalizzazione',
-                               data=file,
-                               file_name=f'cannibalization_data_threshold_{perc_slider}.xlsx',
-                               mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                               key='download_button')
+    properties = list_properties(service)
+    if properties:
+        selected_property = st.selectbox("Seleziona il dominio", properties)
 
-# Copyright and footer
+        # Parametri di ricerca GSC
+        search_type = st.selectbox("Tipo di ricerca", ["web", "image", "video"])
+        start_date = st.date_input("Data inizio", datetime.date.today() - datetime.timedelta(days=7))
+        end_date = st.date_input("Data fine", datetime.date.today())
+
+        @st.cache_data
+        def fetch_gsc_data(_service, selected_property, request):
+            try:
+                response = _service.searchanalytics().query(siteUrl=selected_property, body=request).execute()
+                rows = response.get('rows', [])
+                # Estrarre i dati e trasformarli in DataFrame
+                data = pd.DataFrame(rows)
+
+                # Espandere le chiavi (query e page)
+                if not data.empty:
+                    data[['query', 'page']] = pd.DataFrame(data['keys'].tolist(), index=data.index)
+                    data.drop(columns=['keys'], inplace=True)  # Rimuove la colonna keys
+                return data
+            except Exception as e:
+                st.error(f"Errore nel recuperare i dati da Google Search Console: {e}")
+                return pd.DataFrame()
+
+        if st.button("Estrai dati"):
+            request = {
+                'startDate': start_date.strftime('%Y-%m-%d'),
+                'endDate': end_date.strftime('%Y-%m-%d'),
+                'dimensions': ['query', 'page'],
+                'searchType': search_type
+            }
+            data = fetch_gsc_data(service, selected_property, request)
+
+            # Selettore delle dimensioni da visualizzare
+            if not data.empty:
+                columns = data.columns.tolist()
+                selected_columns = st.multiselect("Seleziona le colonne da visualizzare", columns, default=columns)
+
+                # Visualizza solo le colonne selezionate
+                st.dataframe(data[selected_columns])
+
+                # Scaricare i dati in Excel
+                def to_excel(df):
+                    output = io.BytesIO()
+                    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+                    df.to_excel(writer, sheet_name='Cannibalization Data', index=False)
+                    writer.close()  # Usa writer.close() invece di save()
+                    output.seek(0)
+                    return output.getvalue()
+
+                st.download_button('Scarica Analisi', data=to_excel(data[selected_columns]), file_name='cannibalization_data.xlsx')
+
+# Footer
 st.markdown("---")
 st.markdown("© 2024 [NUR® Digital Marketing](https://www.nur.it/). Tutti i diritti riservati.")
