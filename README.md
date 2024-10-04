@@ -1,10 +1,10 @@
-# Keyword Cannibalisation Tool
+# Keyword Cannibalization Tool
 
-This tool allows you to identify keyword cannibalisation using data from the Google Search Console (GSC). 
+This tool allows you to identify keyword cannibalization using data from the Google Search Console (GSC). 
 Upload a CSV file from the [GSC API](https://search-console-connector.streamlit.app/) to find pages on your site that compete for the same keywords.
 
 ## Functionality
-- Keyword cannibalisation analysis
+- Keyword cannibalization analysis
 - Support for data from Google Search Console API
 - Filtering based on percentage thresholds
 
