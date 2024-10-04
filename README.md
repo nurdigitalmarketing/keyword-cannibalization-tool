@@ -10,17 +10,17 @@ Upload a CSV file from the [GSC API](https://search-console-connector.streamlit.
 
 ## Installation instructions
 1. Clone the repository:
-   ``bash
+   ```bash
    git clone https://github.com/TUO-USERNAME/keyword-cannibalization-tool.git
    ```
 2. Install the dependencies:
-   ``bash
+   ```bash
    pip install -r requirements.txt
    ```
 
 ## Usage
 1. Run the tool:
-   ``bash
+   ```bash
    streamlit run app.py
    ```
 2. Upload the CSV file obtained from the [Google Search Console API](https://search-console-connector.streamlit.app/) to start the analysis.
