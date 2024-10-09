@@ -35,7 +35,7 @@ with st.expander("Come funziona?"):
     """)   
 
 # Slider per impostare la soglia
-perc_slider = st.slider('Imposta Soglia (es: 80 = Selezione delle prime 80% di query per metrica)', 0, 100, value=80, step=10, key='perc_slider')
+perc_slider = st.slider('Imposta soglia (es: 80 = Selezione delle prime 80% di query per metrica)', 0, 100, value=80, step=10, key='perc_slider')
 
 # Spiegazione della soglia
 with st.expander("Cosa significa la soglia?"):
@@ -188,7 +188,7 @@ if __name__ == '__main__':
             st.markdown(f'{s}')
         
         with open(f"cannibalization_data_threshold_{perc_slider}.xlsx", "rb") as file:
-            st.download_button(label='Scarica Analisi di Cannibalizzazione',
+            st.download_button(label='Scarica report di cannibalizzazione',
                                data=file,
                                file_name=f'cannibalization_data_threshold_{perc_slider}.xlsx',
                                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
