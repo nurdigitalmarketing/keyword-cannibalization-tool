@@ -40,7 +40,7 @@ perc_slider = st.slider('Imposta soglia (es: 80 = Selezione delle prime 80% di q
 # Spiegazione della soglia
 st.markdown("""
 <div style="background-color: #E9F2FC; padding: 10px; border-radius: 5px;">
-    <span style="font-size: 12px; color: #004280;">
+    <span style="font-size: 14px; color: #004280;">
     ℹ️ <b>Cosa significa la soglia?</b><br>
     La soglia che imposti indica che l'analisi si concentrerà solo sulle query o parole chiave che generano la percentuale impostata del totale delle prestazioni. 
     Ad esempio, una soglia dell'80% significa che verranno analizzate solo le query che rappresentano l'80% del traffico o delle metriche selezionate, 
